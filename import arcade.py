@@ -12,6 +12,7 @@ WINDOW_TITLE = "Platformer"
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 
+x = 100
 # Constants used to scale our sprites from their original size
 CHARACTER_SCALING = 0.5
 TILE_SCALING = 0.5
