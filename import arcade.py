@@ -12,7 +12,6 @@ WINDOW_TITLE = "Platformer"
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 
-x = 100
 # Constants used to scale our sprites from their original size
 CHARACTER_SCALING = 0.5
 TILE_SCALING = 0.5
@@ -38,14 +37,14 @@ class GameView(arcade.View):
         super().__init__()
 
         # A Camera that can be used for scrolling the screen
-        self.camera_sprites = arcade.Camera2D()
+        self.camera_sprites = arcade.Camera2D(self.window)
 
         # A rectangle that is used to constrain the camera's position.
         # we update it when we load the tilemap
         self.camera_bounds = self.window.rect
 
         # A non-scrolling camera that can be used to draw GUI elements
-        self.camera_gui = arcade.Camera2D()
+        self.camera_gui = arcade.Camera2D(self.window)
 
         # The scene which helps draw multiple spritelists in order.
         self.scene = self.create_scene()
@@ -55,6 +54,8 @@ class GameView(arcade.View):
             "./prova.png",
             scale=CHARACTER_SCALING
         )
+
+        self.sprite_sfondo = [0, 0]
 
         # Our physics engine
         self.physics_engine = arcade.PhysicsEnginePlatformer(
@@ -129,6 +130,8 @@ class GameView(arcade.View):
 
         # Clear the screen to the background color
         self.clear()
+        arcade.draw_sprite_rect(self.sprite_sfondo,arcade.XYWH(0,0,WINDOW_WIDTH,WINDOW_HEIGHT))
+        
         # Draw the map with the sprite camera
         with self.camera_sprites.activate():
             # Draw our Scene
