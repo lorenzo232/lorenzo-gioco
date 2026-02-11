@@ -130,8 +130,11 @@ class GameView(arcade.View):
 
         # Clear the screen to the background color
         self.clear()
-        arcade.draw_sprite_rect(self.sprite_sfondo,arcade.XYWH(0,0,WINDOW_WIDTH,WINDOW_HEIGHT))
-        
+        # arcade.draw_sprite_rect(self.sprite_sfondo,arcade.XYWH(0,0,WINDOW_WIDTH,WINDOW_HEIGHT))
+        arcade.draw_texture_rect(
+            arcade.load_texture("./sfondo2.png"),
+            arcade.XYWH(WINDOW_WIDTH / 2,WINDOW_HEIGHT / 2,WINDOW_WIDTH,WINDOW_HEIGHT)
+        )
         # Draw the map with the sprite camera
         with self.camera_sprites.activate():
             # Draw our Scene
