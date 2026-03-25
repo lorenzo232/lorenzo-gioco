@@ -1,0 +1,206 @@
+import arcade
+import random
+
+WINDOW_TITLE = "Platformer"
+WINDOW_WIDTH = 1280
+WINDOW_HEIGHT = 720
+
+CHARACTER_SCALING = 0.5
+PLAYER_MOVEMENT_SPEED = 10
+GRAVITY = 1
+PLAYER_JUMP_SPEED = 20
+
+FOLLOW_DECAY_CONST = 0.3
+
+TILE_SIZE = 64
+GROUND_Y = 32
+
+
+# 🏁 SCHERMATA FINALE
+class WinView(arcade.View):
+    def on_draw(self):
+        self.clear()
+        arcade.draw_text(
+            "HAI VINTO!",
+            WINDOW_WIDTH / 2,
+            WINDOW_HEIGHT / 2,
+            arcade.color.LIGHT_BLUE,
+            font_size=50,
+            anchor_x="center",
+        )
+
+
+class GameView(arcade.View):
+
+    def __init__(self):
+        super().__init__()
+
+        self.camera_sprites = arcade.Camera2D(self.window)
+        self.camera_gui = arcade.Camera2D(self.window)
+
+        self.scene = arcade.Scene()
+
+        self.player_sprite = arcade.Sprite("./prova.png", scale=CHARACTER_SCALING)
+
+        self.background_texture = arcade.load_texture("./sfondo2.png")
+
+        self.score = 0
+        self.left_key_down = False
+        self.right_key_down = False
+
+        self.score_display = arcade.Text(
+            "Score: 0", 700, 700, arcade.csscolor.WHITE, 18
+        )
+
+        self.next_x = 0
+
+        self.setup()
+
+    def setup(self):
+        self.scene = arcade.Scene()
+
+        self.scene.add_sprite_list("Platforms", use_spatial_hash=True)
+        self.scene.add_sprite_list("Coins")
+
+        # 👉 genera terreno iniziale SICURO
+        for _ in range(40):
+            self.generate_column()
+
+        # 👉 spawn corretto sopra il terreno
+        self.player_sprite.center_x = 100
+        self.player_sprite.center_y = GROUND_Y + TILE_SIZE
+
+        self.scene.add_sprite("Player", self.player_sprite)
+
+        self.physics_engine = arcade.PhysicsEnginePlatformer(
+            self.player_sprite,
+            gravity_constant=GRAVITY,
+            walls=self.scene["Platforms"]
+        )
+
+        self.camera_bounds = arcade.LRBT(0, 999999, 0, 720)
+
+    # 🔥 generazione mondo sicura con box.png
+    def generate_column(self):
+        ground_texture = ":resources:images/tiles/grassMid.png"
+        block_texture = "./box.png"  # <-- blocchi cambiati
+
+        x = self.next_x
+
+        # terreno sempre presente
+        ground = arcade.Sprite(ground_texture, scale=0.5)
+        ground.center_x = x
+        ground.center_y = GROUND_Y
+        self.scene["Platforms"].append(ground)
+
+        # ostacoli bassi
+        if random.random() < 0.3:
+            height = random.randint(1, 2)
+            for h in range(height):
+                block = arcade.Sprite(block_texture, scale=0.5)
+                block.center_x = x
+                block.center_y = GROUND_Y + TILE_SIZE * (h + 1)
+                self.scene["Platforms"].append(block)
+
+        # moneta sopra il percorso
+        if random.random() < 0.5:
+            coin = arcade.Sprite(":resources:images/items/coinGold.png", scale=0.5)
+            coin.center_x = x
+            coin.center_y = GROUND_Y + TILE_SIZE * 2
+            self.scene["Coins"].append(coin)
+
+        self.next_x += TILE_SIZE
+
+    def on_draw(self):
+        self.clear()
+
+        arcade.draw_texture_rect(
+            self.background_texture,
+            arcade.XYWH(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2, WINDOW_WIDTH, WINDOW_HEIGHT)
+        )
+
+        with self.camera_sprites.activate():
+            self.scene.draw()
+
+        with self.camera_gui.activate():
+            self.score_display.text = f"Score: {self.score}"
+            self.score_display.draw()
+
+    def update_player_speed(self):
+        self.player_sprite.change_x = 0
+
+        if self.left_key_down and not self.right_key_down:
+            self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
+        elif self.right_key_down and not self.left_key_down:
+            self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
+
+    def on_key_press(self, key, modifiers):
+
+        if key == arcade.key.UP or key == arcade.key.W:
+            if self.physics_engine.can_jump():
+                self.player_sprite.change_y = PLAYER_JUMP_SPEED
+
+        elif key == arcade.key.LEFT or key == arcade.key.A:
+            self.left_key_down = True
+            self.update_player_speed()
+
+        elif key == arcade.key.RIGHT or key == arcade.key.D:
+            self.right_key_down = True
+            self.update_player_speed()
+
+    def on_key_release(self, key, modifiers):
+
+        if key == arcade.key.LEFT or key == arcade.key.A:
+            self.left_key_down = False
+        elif key == arcade.key.RIGHT or key == arcade.key.D:
+            self.right_key_down = False
+
+        self.update_player_speed()
+
+    def center_camera_to_player(self):
+        self.camera_sprites.position = arcade.math.smerp_2d(
+            self.camera_sprites.position,
+            self.player_sprite.position,
+            self.window.delta_time,
+            FOLLOW_DECAY_CONST,
+        )
+
+    def on_update(self, delta_time: float):
+
+        self.physics_engine.update()
+
+        # genera mondo davanti al player
+        while self.next_x < self.player_sprite.center_x + 800:
+            self.generate_column()
+
+        # monete
+        coin_hit_list = arcade.check_for_collision_with_list(
+            self.player_sprite, self.scene["Coins"]
+        )
+
+        for coin in coin_hit_list:
+            coin.remove_from_sprite_lists()
+            self.score += 1
+
+        # 🏁 VITTORIA CON SCHERMATA
+        if self.score >= 30:
+            self.window.show_view(WinView())
+            return
+
+        self.center_camera_to_player()
+
+    def on_resize(self, width, height):
+        super().on_resize(width, height)
+        self.camera_sprites.match_window()
+        self.camera_gui.match_window(position=True)
+
+
+def main():
+    window = arcade.Window(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
+    game = GameView()
+    window.show_view(game)
+    arcade.run()
+
+
+if __name__ == "__main__":
+    main()
