@@ -72,8 +72,8 @@ class GameView(arcade.View):
         # Text object to display the score
         self.score_display = arcade.Text(
             "Score: 0",
-            x=10,
-            y=10,
+            x=700,
+            y=700,
             color=arcade.csscolor.WHITE,
             font_size=18,
         )
@@ -113,6 +113,7 @@ class GameView(arcade.View):
         # Initialize Scene with our TileMap, this will automatically add all layers
         # from the map as SpriteLists in the scene in the proper order.
         return arcade.Scene.from_tilemap(tile_map)
+        
 
     def reset(self):
         """Reset the game to the initial state."""
