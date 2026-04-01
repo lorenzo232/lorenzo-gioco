@@ -16,7 +16,6 @@ TILE_SIZE = 64
 GROUND_Y = 32
 
 
-# 🏁 SCHERMATA FINALE
 class WinView(arcade.View):
     def on_draw(self):
         self.clear()
@@ -41,7 +40,6 @@ class GameView(arcade.View):
         self.scene = arcade.Scene()
 
         self.player_sprite = arcade.Sprite("./prova.png", scale=CHARACTER_SCALING)
-
         self.background_texture = arcade.load_texture("./sfondo2.png")
 
         self.score = 0
@@ -62,11 +60,9 @@ class GameView(arcade.View):
         self.scene.add_sprite_list("Platforms", use_spatial_hash=True)
         self.scene.add_sprite_list("Coins")
 
-        # genera terreno iniziale
         for _ in range(40):
             self.generate_column()
 
-        # spawn corretto sopra il terreno
         self.player_sprite.center_x = 100
         self.player_sprite.center_y = GROUND_Y + TILE_SIZE
 
@@ -78,31 +74,40 @@ class GameView(arcade.View):
             walls=self.scene["Platforms"]
         )
 
-        self.camera_bounds = arcade.LRBT(0, 999999, 0, 720)
-
-    # 🔥 generazione colonne compatte
     def generate_column(self):
-        block_texture = "./box.png"  # tutti i blocchi box.png
-
+        block_texture = "./box.png"
         x = self.next_x
 
-        # altezza della colonna (1 blocco minimo)
-        height = random.randint(1, 4)  # altezza variabile
+        # Altezza limitata per evitare salti impossibili
+        height = random.randint(1, 3)
 
+        # Crea piattaforma
         for h in range(height):
             block = arcade.Sprite(block_texture, scale=0.5)
             block.center_x = x
-            block.center_y = GROUND_Y + TILE_SIZE * h  # impilati uno sopra l'altro
+            block.center_y = GROUND_Y + TILE_SIZE * h
             self.scene["Platforms"].append(block)
 
-        # moneta sopra l'ultimo blocco
-        coin = arcade.Sprite(":resources:images/items/coinGold.png", scale=0.5)
-        coin.center_x = x
-        coin.center_y = GROUND_Y + TILE_SIZE * height
-        self.scene["Coins"].append(coin)
+        # 🎯 POSIZIONAMENTO MONETA FIXATO
+        # sempre sopra, ma con offset sicuro
+        if random.random() < 0.8:  # non sempre → più varietà
 
-        # aggiorna posizione per la prossima colonna
-        self.next_x += TILE_SIZE  # colonne attaccate tra loro
+            coin = arcade.Sprite(":resources:images/items/coinGold.png", scale=0.5)
+            coin.center_x = x
+
+            # altezza base sopra piattaforma
+            base_y = GROUND_Y + TILE_SIZE * height
+
+            # offset controllato (SEMPRE raggiungibile)
+            offset = random.choice([40, 60, 80])
+
+            coin.center_y = base_y + offset
+
+            self.scene["Coins"].append(coin)
+
+        # gap variabile ma sempre saltabile
+        gap = random.choice([0, TILE_SIZE, TILE_SIZE])
+        self.next_x += TILE_SIZE + gap
 
     def on_draw(self):
         self.clear()
@@ -162,11 +167,20 @@ class GameView(arcade.View):
 
         self.physics_engine.update()
 
-        # genera mondo davanti al player
+        # genera mondo
         while self.next_x < self.player_sprite.center_x + 800:
             self.generate_column()
 
-        # gestione monete
+        # rimuove roba vecchia (performance)
+        for sprite in self.scene["Platforms"]:
+            if sprite.center_x < self.player_sprite.center_x - 1000:
+                sprite.remove_from_sprite_lists()
+
+        for coin in self.scene["Coins"]:
+            if coin.center_x < self.player_sprite.center_x - 1000:
+                coin.remove_from_sprite_lists()
+
+        # collisioni monete
         coin_hit_list = arcade.check_for_collision_with_list(
             self.player_sprite, self.scene["Coins"]
         )
@@ -175,8 +189,8 @@ class GameView(arcade.View):
             coin.remove_from_sprite_lists()
             self.score += 1
 
-        # 🏁 vittoria
-        if self.score >= 30:
+        # vittoria
+        if self.score >= 50:
             self.window.show_view(WinView())
             return
 

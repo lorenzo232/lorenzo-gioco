@@ -1,156 +1,130 @@
-"""
-Platformer Template
-
-If Python and Arcade are installed, this example can be run from the command line with:
-python -m arcade.examples.template_platformer
-"""
 import arcade
-from arcade.types import Color
+import random
 
-# --- Constants
 WINDOW_TITLE = "Platformer"
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 
-# Constants used to scale our sprites from their original size
 CHARACTER_SCALING = 0.5
-TILE_SCALING = 0.5
-COIN_SCALING = 0.5
-SPRITE_PIXEL_SIZE = 128
-GRID_PIXEL_SIZE = SPRITE_PIXEL_SIZE * TILE_SCALING
-
-# Movement speed of player, in pixels per frame
 PLAYER_MOVEMENT_SPEED = 10
 GRAVITY = 1
 PLAYER_JUMP_SPEED = 20
 
-# Camera constants
-FOLLOW_DECAY_CONST = 0.3  # get within 1% of the target position within 2 seconds
+FOLLOW_DECAY_CONST = 0.3
+
+TILE_SIZE = 64
+GROUND_Y = 32
+
+
+class WinView(arcade.View):
+    def on_draw(self):
+        self.clear()
+        arcade.draw_text(
+            "HAI VINTO!",
+            WINDOW_WIDTH / 2,
+            WINDOW_HEIGHT / 2,
+            arcade.color.LIGHT_BLUE,
+            font_size=50,
+            anchor_x="center",
+        )
 
 
 class GameView(arcade.View):
-    """
-    Main application class.
-    """
 
     def __init__(self):
         super().__init__()
 
-        # A Camera that can be used for scrolling the screen
         self.camera_sprites = arcade.Camera2D(self.window)
-
-        # A rectangle that is used to constrain the camera's position.
-        # we update it when we load the tilemap
-        self.camera_bounds = self.window.rect
-
-        # A non-scrolling camera that can be used to draw GUI elements
         self.camera_gui = arcade.Camera2D(self.window)
 
-        # The scene which helps draw multiple spritelists in order.
-        self.scene = self.create_scene()
+        self.scene = arcade.Scene()
 
-        # Set up the player, specifically placing it at these coordinates.
-        self.player_sprite = arcade.Sprite(
-            "./prova.png",
-            scale=CHARACTER_SCALING
-        )
+        self.player_sprite = arcade.Sprite("./prova.png", scale=CHARACTER_SCALING)
+        self.background_texture = arcade.load_texture("./sfondo2.png")
 
-        self.sprite_sfondo = [0, 0]
-
-        # Our physics engine
-        self.physics_engine = arcade.PhysicsEnginePlatformer(
-            self.player_sprite, gravity_constant=GRAVITY, walls=self.scene["Platforms"]
-        )
-
-        # Keep track of the score
         self.score = 0
-
-        # What key is pressed down?
         self.left_key_down = False
         self.right_key_down = False
 
-        # Text object to display the score
         self.score_display = arcade.Text(
-            "Score: 0",
-            x=700,
-            y=700,
-            color=arcade.csscolor.WHITE,
-            font_size=18,
+            "Score: 0", 20, WINDOW_HEIGHT - 40, arcade.csscolor.WHITE, 18
         )
 
-    def create_scene(self) -> arcade.Scene:
-        """Load the tilemap and create the scene object."""
-        # Our TileMap Object
-        # Layer specific options are defined based on Layer names in a dictionary
-        # Doing this will make the SpriteList for the platforms layer
-        # use spatial hashing for collision detection.
-        layer_options = {
-            "Platforms": {
-                "use_spatial_hash": True,
-            },
-        }
-        tile_map = arcade.load_tilemap(
-            ":resources:tiled_maps/map.json",
-            scaling=TILE_SCALING,
-            layer_options=layer_options,
-        )
+        self.next_x = 0
 
-        # Set the window background color to the same as the map if it has one
-        if tile_map.background_color:
-            self.window.background_color = Color.from_iterable(tile_map.background_color)
+        self.setup()
 
-        # Use the tilemap's size to correctly set the camera's bounds.
-        # Because how how shallow the map is we don't offset the bounds height
-        self.camera_bounds = arcade.LRBT(
-            self.window.width/2.0,
-            tile_map.width * GRID_PIXEL_SIZE - self.window.width/2.0,
-            self.window.height/2.0,
-            tile_map.height * GRID_PIXEL_SIZE
-        )
+    def setup(self):
+        self.scene = arcade.Scene()
 
+        self.scene.add_sprite_list("Platforms", use_spatial_hash=True)
+        self.scene.add_sprite_list("Coins")
 
-        # Our Scene Object
-        # Initialize Scene with our TileMap, this will automatically add all layers
-        # from the map as SpriteLists in the scene in the proper order.
-        return arcade.Scene.from_tilemap(tile_map)
-        
+        for _ in range(40):
+            self.generate_column()
 
-    def reset(self):
-        """Reset the game to the initial state."""
-        self.score = 0
-        # Load a fresh scene to get the coins back
-        self.scene = self.create_scene()
+        self.player_sprite.center_x = 100
+        self.player_sprite.center_y = GROUND_Y + TILE_SIZE
 
-        # Move the player to start position
-        self.player_sprite.position = (128, 256)
-        # Add the player to the scene
         self.scene.add_sprite("Player", self.player_sprite)
 
-    def on_draw(self):
-        """Render the screen."""
-
-        # Clear the screen to the background color
-        self.clear()
-        # arcade.draw_sprite_rect(self.sprite_sfondo,arcade.XYWH(0,0,WINDOW_WIDTH,WINDOW_HEIGHT))
-        arcade.draw_texture_rect(
-            arcade.load_texture("./sfondo2.png"),
-            arcade.XYWH(WINDOW_WIDTH / 2,WINDOW_HEIGHT / 2,WINDOW_WIDTH,WINDOW_HEIGHT)
+        self.physics_engine = arcade.PhysicsEnginePlatformer(
+            self.player_sprite,
+            gravity_constant=GRAVITY,
+            walls=self.scene["Platforms"]
         )
-        # Draw the map with the sprite camera
+
+    def generate_column(self):
+        block_texture = "./box.png"
+        x = self.next_x
+
+        # Altezza limitata per evitare salti impossibili
+        height = random.randint(1, 3)
+
+        # Crea piattaforma
+        for h in range(height):
+            block = arcade.Sprite(block_texture, scale=0.5)
+            block.center_x = x
+            block.center_y = GROUND_Y + TILE_SIZE * h
+            self.scene["Platforms"].append(block)
+
+        # 🎯 POSIZIONAMENTO MONETA FIXATO
+        # sempre sopra, ma con offset sicuro
+        if random.random() < 0.8:  # non sempre → più varietà
+
+            coin = arcade.Sprite(":resources:images/items/coinGold.png", scale=0.5)
+            coin.center_x = x
+
+            # altezza base sopra piattaforma
+            base_y = GROUND_Y + TILE_SIZE * height
+
+            # offset controllato (SEMPRE raggiungibile)
+            offset = random.choice([40, 60, 80])
+
+            coin.center_y = base_y + offset
+
+            self.scene["Coins"].append(coin)
+
+        # gap variabile ma sempre saltabile
+        gap = random.choice([0, TILE_SIZE, TILE_SIZE])
+        self.next_x += TILE_SIZE + gap
+
+    def on_draw(self):
+        self.clear()
+
+        arcade.draw_texture_rect(
+            self.background_texture,
+            arcade.XYWH(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2, WINDOW_WIDTH, WINDOW_HEIGHT)
+        )
+
         with self.camera_sprites.activate():
-            # Draw our Scene
-            # Note, if you a want pixelated look, add pixelated=True to the parameters
             self.scene.draw()
 
-        # Draw the score with the gui camera
         with self.camera_gui.activate():
-            # Draw our score on the screen. The camera keeps it in place.
             self.score_display.text = f"Score: {self.score}"
             self.score_display.draw()
 
     def update_player_speed(self):
-        pass
-        # Calculate speed based on the keys pressed
         self.player_sprite.change_x = 0
 
         if self.left_key_down and not self.right_key_down:
@@ -159,35 +133,29 @@ class GameView(arcade.View):
             self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
 
     def on_key_press(self, key, modifiers):
-        """Called whenever a key is pressed."""
-        print(self.player_sprite.position)
-        
-        # Jump
+
         if key == arcade.key.UP or key == arcade.key.W:
             if self.physics_engine.can_jump():
                 self.player_sprite.change_y = PLAYER_JUMP_SPEED
 
-        # Left
         elif key == arcade.key.LEFT or key == arcade.key.A:
             self.left_key_down = True
             self.update_player_speed()
 
-        # Right
         elif key == arcade.key.RIGHT or key == arcade.key.D:
             self.right_key_down = True
             self.update_player_speed()
 
     def on_key_release(self, key, modifiers):
-        """Called when the user releases a key."""
+
         if key == arcade.key.LEFT or key == arcade.key.A:
             self.left_key_down = False
-            self.update_player_speed()
         elif key == arcade.key.RIGHT or key == arcade.key.D:
             self.right_key_down = False
-            self.update_player_speed()
+
+        self.update_player_speed()
 
     def center_camera_to_player(self):
-        # Move the camera to center on the player
         self.camera_sprites.position = arcade.math.smerp_2d(
             self.camera_sprites.position,
             self.player_sprite.position,
@@ -195,47 +163,48 @@ class GameView(arcade.View):
             FOLLOW_DECAY_CONST,
         )
 
-        # Constrain the camera's position to the camera bounds.
-        self.camera_sprites.view_data.position = arcade.camera.grips.constrain_xy(
-            self.camera_sprites.view_data, self.camera_bounds
-        )
-
     def on_update(self, delta_time: float):
-        """Movement and game logic"""
 
-        # Move the player with the physics engine
         self.physics_engine.update()
 
-        # See if we hit any coins
+        # genera mondo
+        while self.next_x < self.player_sprite.center_x + 800:
+            self.generate_column()
+
+        # rimuove roba vecchia (performance)
+        for sprite in self.scene["Platforms"]:
+            if sprite.center_x < self.player_sprite.center_x - 1000:
+                sprite.remove_from_sprite_lists()
+
+        for coin in self.scene["Coins"]:
+            if coin.center_x < self.player_sprite.center_x - 1000:
+                coin.remove_from_sprite_lists()
+
+        # collisioni monete
         coin_hit_list = arcade.check_for_collision_with_list(
             self.player_sprite, self.scene["Coins"]
         )
 
-        # Loop through each coin we hit (if any) and remove it
         for coin in coin_hit_list:
-            # Remove the coin
             coin.remove_from_sprite_lists()
-            # Add one to the score
             self.score += 1
 
-        # Position the camera
+        # vittoria
+        if self.score >= 50:
+            self.window.show_view(WinView())
+            return
+
         self.center_camera_to_player()
 
-    def on_resize(self, width: int, height: int):
-        """ Resize window """
+    def on_resize(self, width, height):
         super().on_resize(width, height)
-        # Update the cameras to match the new window size
         self.camera_sprites.match_window()
-        # The position argument keeps `0, 0` in the bottom left corner.
         self.camera_gui.match_window(position=True)
 
 
 def main():
-    """Main function"""
     window = arcade.Window(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
     game = GameView()
-    game.reset()
-
     window.show_view(game)
     arcade.run()
 
