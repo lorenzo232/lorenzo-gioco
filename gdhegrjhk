@@ -1,6 +1,8 @@
 import arcade
 import random
+import math
 
+# COSTANTI DI GIOCO
 WINDOW_TITLE = "Platformer"
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
@@ -15,7 +17,7 @@ FOLLOW_DECAY_CONST = 0.3
 TILE_SIZE = 64
 GROUND_Y = 32
 
-
+# SCHERMATA DI VITTORIA
 class WinView(arcade.View):
     def on_draw(self):
         self.clear()
@@ -28,7 +30,11 @@ class WinView(arcade.View):
             anchor_x="center",
         )
 
+    def on_key_press(self, key, modifiers):
+        if key == arcade.key.R:
+            self.window.show_view(GameView())
 
+# GIOCO PRINCIPALE
 class GameView(arcade.View):
 
     def __init__(self):
@@ -39,7 +45,9 @@ class GameView(arcade.View):
 
         self.scene = arcade.Scene()
 
+        # Player
         self.player_sprite = arcade.Sprite("./prova.png", scale=CHARACTER_SCALING)
+
         self.background_texture = arcade.load_texture("./sfondo2.png")
 
         self.score = 0
@@ -49,81 +57,100 @@ class GameView(arcade.View):
         self.score_display = arcade.Text(
             "Score: 0", 20, WINDOW_HEIGHT - 40, arcade.csscolor.WHITE, 18
         )
-
         self.next_x = 0
+
+        # Boss
+        self.boss_spawned = False
+
+        # Timer per sparo
+        self.shoot_timer = 0
 
         self.setup()
 
+    # ------------------------
+    # SETUP INIZIALE
+    # ------------------------
     def setup(self):
         self.scene = arcade.Scene()
 
+        # Liste sprite
         self.scene.add_sprite_list("Platforms", use_spatial_hash=True)
         self.scene.add_sprite_list("Coins")
+        self.scene.add_sprite_list("Enemies")
+        self.scene.add_sprite_list("Bullets")
 
+        # Genera piattaforme iniziali
         for _ in range(40):
             self.generate_column()
 
+        # Posizione player
         self.player_sprite.center_x = 100
         self.player_sprite.center_y = GROUND_Y + TILE_SIZE
 
         self.scene.add_sprite("Player", self.player_sprite)
 
+        # Fisica
         self.physics_engine = arcade.PhysicsEnginePlatformer(
             self.player_sprite,
             gravity_constant=GRAVITY,
             walls=self.scene["Platforms"]
         )
 
+    # ------------------------
+    # GENERAZIONE PIATTAFORME
+    # ------------------------
     def generate_column(self):
         block_texture = "./box.png"
         x = self.next_x
 
-        # Altezza limitata per evitare salti impossibili
         height = random.randint(1, 3)
 
-        # Crea piattaforma
+        # Crea blocchi
         for h in range(height):
             block = arcade.Sprite(block_texture, scale=0.5)
             block.center_x = x
             block.center_y = GROUND_Y + TILE_SIZE * h
             self.scene["Platforms"].append(block)
 
-        # 🎯 POSIZIONAMENTO MONETA FIXATO
-        # sempre sopra, ma con offset sicuro
-        if random.random() < 0.8:  # non sempre → più varietà
-
+        # Monete
+        if random.random() < 0.8:
             coin = arcade.Sprite(":resources:images/items/coinGold.png", scale=0.5)
             coin.center_x = x
 
-            # altezza base sopra piattaforma
             base_y = GROUND_Y + TILE_SIZE * height
-
-            # offset controllato (SEMPRE raggiungibile)
             offset = random.choice([40, 60, 80])
-
             coin.center_y = base_y + offset
 
             self.scene["Coins"].append(coin)
 
-        # gap variabile ma sempre saltabile
+        # Gap tra piattaforme
         gap = random.choice([0, TILE_SIZE, TILE_SIZE])
         self.next_x += TILE_SIZE + gap
 
+    # ------------------------
+    # DISEGNO
+    # ------------------------
     def on_draw(self):
         self.clear()
 
+        # Sfondo fisso (NON segue camera)
         arcade.draw_texture_rect(
             self.background_texture,
             arcade.XYWH(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2, WINDOW_WIDTH, WINDOW_HEIGHT)
         )
 
+        # Disegna mondo
         with self.camera_sprites.activate():
             self.scene.draw()
 
+        # Disegna UI
         with self.camera_gui.activate():
             self.score_display.text = f"Score: {self.score}"
             self.score_display.draw()
 
+    # ------------------------
+    # MOVIMENTO PLAYER
+    # ------------------------
     def update_player_speed(self):
         self.player_sprite.change_x = 0
 
@@ -134,10 +161,12 @@ class GameView(arcade.View):
 
     def on_key_press(self, key, modifiers):
 
+        # Salto
         if key == arcade.key.UP or key == arcade.key.W:
             if self.physics_engine.can_jump():
                 self.player_sprite.change_y = PLAYER_JUMP_SPEED
 
+        # Movimento
         elif key == arcade.key.LEFT or key == arcade.key.A:
             self.left_key_down = True
             self.update_player_speed()
@@ -155,6 +184,9 @@ class GameView(arcade.View):
 
         self.update_player_speed()
 
+    # ------------------------
+    # CAMERA
+    # ------------------------
     def center_camera_to_player(self):
         self.camera_sprites.position = arcade.math.smerp_2d(
             self.camera_sprites.position,
@@ -163,24 +195,67 @@ class GameView(arcade.View):
             FOLLOW_DECAY_CONST,
         )
 
+    # ------------------------
+    # SPAWN BOSS
+    # ------------------------
+    def spawn_boss(self):
+        boss = arcade.Sprite("nemicofinale.png", scale=CHARACTER_SCALING)
+
+        # Spawn davanti al player
+        boss.center_x = self.player_sprite.center_x + 600
+        boss.center_y = GROUND_Y + TILE_SIZE
+
+        # 👾 Più veloce
+        boss.change_x = -6
+
+        self.scene["Enemies"].append(boss)
+
+    # ------------------------
+    # SPARO PROIETTILI
+    # ------------------------
+    def shoot_bullet(self, enemy):
+        bullet = arcade.SpriteSolidColor(10, 10, arcade.color.RED)
+
+        # Parte dalla posizione del nemico
+        bullet.center_x = enemy.center_x
+        bullet.center_y = enemy.center_y
+
+        # Direzione verso il player
+        dx = self.player_sprite.center_x - enemy.center_x
+        dy = self.player_sprite.center_y - enemy.center_y
+        angle = math.atan2(dy, dx)
+
+        speed = 8
+
+        # Movimento del proiettile
+        bullet.change_x = math.cos(angle) * speed
+        bullet.change_y = math.sin(angle) * speed
+
+        self.scene["Bullets"].append(bullet)
+
+    # ------------------------
+    # UPDATE (LOGICA GIOCO)
+    # ------------------------
     def on_update(self, delta_time: float):
 
+        # Aggiorna fisica
         self.physics_engine.update()
 
-        # genera mondo
+        # Genera mondo infinito
         while self.next_x < self.player_sprite.center_x + 800:
             self.generate_column()
 
-        # rimuove roba vecchia (performance)
-        for sprite in self.scene["Platforms"]:
+        # Rimuove piattaforme vecchie
+        for sprite in self.scene["Platforms"][:]:
             if sprite.center_x < self.player_sprite.center_x - 1000:
                 sprite.remove_from_sprite_lists()
 
-        for coin in self.scene["Coins"]:
+        # Rimuove monete vecchie
+        for coin in self.scene["Coins"][:]:
             if coin.center_x < self.player_sprite.center_x - 1000:
                 coin.remove_from_sprite_lists()
 
-        # collisioni monete
+        # Collisione monete
         coin_hit_list = arcade.check_for_collision_with_list(
             self.player_sprite, self.scene["Coins"]
         )
@@ -189,7 +264,45 @@ class GameView(arcade.View):
             coin.remove_from_sprite_lists()
             self.score += 1
 
-        # vittoria
+        # Spawn boss
+        if self.score >= 10 and not self.boss_spawned:
+            self.spawn_boss()
+            self.boss_spawned = True
+
+        # Movimento nemico
+        for enemy in self.scene["Enemies"]:
+            if enemy.center_x < self.player_sprite.center_x:
+                enemy.change_x = 6
+            else:
+                enemy.change_x = -6
+
+            enemy.center_x += enemy.change_x
+
+        self.shoot_timer += delta_time
+        if self.shoot_timer > 0.8:  # prima era 1.5 → ora più veloce
+            for enemy in self.scene["Enemies"]:
+                # Spara 2 proiettili invece di 1
+                self.shoot_bullet(enemy)
+                self.shoot_bullet(enemy)
+            self.shoot_timer = 0
+
+        # Movimento proiettili
+        for bullet in self.scene["Bullets"][:]:
+            bullet.center_x += bullet.change_x
+            bullet.center_y += bullet.change_
+
+            if bullet.center_x < self.player_sprite.center_x - 1000:
+                bullet.remove_from_sprite_lists()
+
+        if arcade.check_for_collision_with_list(self.player_sprite, self.scene["Bullets"]):
+            self.window.show_view(GameView())
+            return
+
+        if arcade.check_for_collision_with_list(self.player_sprite, self.scene["Enemies"]):
+            self.window.show_view(GameView())
+            return
+
+        # Vittoria
         if self.score >= 50:
             self.window.show_view(WinView())
             return
@@ -202,6 +315,7 @@ class GameView(arcade.View):
         self.camera_gui.match_window(position=True)
 
 
+# AVVIO GIOCO
 def main():
     window = arcade.Window(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
     game = GameView()
